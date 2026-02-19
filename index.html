@@ -619,7 +619,12 @@ const TEMPLATE_FILES = [
 const MODEL_TEXT  = 'gemini-2.0-flash';
 const MODEL_IMAGE = 'gemini-3-pro-image-preview';
 const GEMINI_API  = 'https://generativelanguage.googleapis.com/v1beta/models/';
-const PROXY       = 'https://api.allorigins.win/raw?url=';
+// Multiple CORS proxies tried in order (fallback if one is down/blocked)
+const PROXIES = [
+    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    url => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(url)}`,
+];
 
 // =============================================================================
 // APP STATE
@@ -810,7 +815,7 @@ function blobToDataURL(blob) {
 
 async function urlToBase64(imageUrl) {
     if (!imageUrl) return null;
-    const attempts = [imageUrl, PROXY + encodeURIComponent(imageUrl)];
+    const attempts = [imageUrl, ...PROXIES.map(fn => fn(imageUrl))];
     for (const u of attempts) {
         try {
             const res = await fetch(u, { signal: AbortSignal.timeout(12000) });
@@ -827,17 +832,69 @@ async function urlToBase64(imageUrl) {
 // LANDING PAGE FETCH
 // =============================================================================
 async function fetchPage(rawUrl) {
-    const res = await fetch(PROXY + encodeURIComponent(rawUrl), {
-        signal: AbortSignal.timeout(20000)
-    });
-    if (!res.ok) throw new Error(`Could not fetch landing page (HTTP ${res.status}). Check the URL.`);
-    const html = await res.text();
+    let html = null;
+    let lastError = '';
 
-    const ogImage =
+    // Try each proxy in order until one works
+    for (const buildUrl of PROXIES) {
+        try {
+            const res = await fetch(buildUrl(rawUrl), {
+                signal: AbortSignal.timeout(20000)
+            });
+            if (res.ok) {
+                const text = await res.text();
+                // Sanity check: make sure we got actual HTML
+                if (text.length > 200 && (text.includes('<') || text.includes('{'))) {
+                    html = text;
+                    break;
+                }
+            }
+            lastError = `HTTP ${res.status}`;
+        } catch (e) {
+            lastError = e.message;
+        }
+    }
+
+    if (!html) {
+        throw new Error(`Could not fetch the landing page (${lastError}). Try a different URL or check your internet connection.`);
+    }
+
+    // Extract product image — try multiple patterns including Shopify JSON-LD
+    let ogImage = null;
+
+    // 1. OG / Twitter meta tags
+    ogImage =
         (html.match(/property="og:image"\s+content="([^"]+)"/i) ||
          html.match(/content="([^"]+)"\s+property="og:image"/i) ||
+         html.match(/property="og:image:secure_url"\s+content="([^"]+)"/i) ||
          html.match(/name="twitter:image"\s+content="([^"]+)"/i) ||
          html.match(/content="([^"]+)"\s+name="twitter:image"/i))?.[1] || null;
+
+    // 2. Shopify JSON-LD structured data (product pages)
+    if (!ogImage) {
+        const ldMatch = html.match(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi);
+        if (ldMatch) {
+            for (const block of ldMatch) {
+                try {
+                    const json = JSON.parse(block.replace(/<[^>]+>/g, ''));
+                    const img = json.image?.[0] || json.image || json.logo?.url;
+                    if (img && typeof img === 'string' && img.startsWith('http')) {
+                        ogImage = img;
+                        break;
+                    }
+                } catch (_) {}
+            }
+        }
+    }
+
+    // 3. Shopify CDN images (cdn.shopify.com)
+    if (!ogImage) {
+        const shopifyImg = html.match(/https:\/\/cdn\.shopify\.com\/s\/files\/[^\s"']+\.(jpg|jpeg|png|webp)/i)?.[0];
+        if (shopifyImg) ogImage = shopifyImg;
+    }
+
+    // Ensure HTTPS
+    if (ogImage && ogImage.startsWith('//')) ogImage = 'https:' + ogImage;
 
     const bodyText = html
         .replace(/<script[\s\S]*?<\/script>/gi, '')
