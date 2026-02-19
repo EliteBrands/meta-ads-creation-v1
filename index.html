@@ -565,9 +565,14 @@
 
                 <div class="form-footer">
                     <span class="selection-info" id="selection-count">No templates selected</span>
-                    <button class="btn btn-primary" id="generate-btn" onclick="startGeneration()">
-                        Generate Ads ✦
-                    </button>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;align-items:center">
+                        <button class="btn btn-secondary" id="auto-gen-btn" onclick="startAutoGeneration()">
+                            Generate 10 Ads
+                        </button>
+                        <button class="btn btn-primary" id="generate-btn" onclick="startGeneration()">
+                            Generate with Templates ✦
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1288,6 +1293,253 @@ ABSOLUTE RULES — never break these:
 4. NO INVENTION: Do not add decorative elements, borders, icons, or shapes that are not in the template
 5. PRODUCT IMAGE: Place the product photo exactly where the template shows a product/hero image — same size, same position, same treatment (e.g. if template has product on white background floating in top half, do the same)
 6. ASPECT RATIO: Output must be vertical 9:16 (portrait, 1080×1920)`;
+}
+
+// =============================================================================
+// AUTO CONCEPTS PROMPT — generates 10 distinct ad concepts via Gemini Flash
+// =============================================================================
+function buildAutoConceptsPrompt(analysis, niche) {
+    return `You are an elite Meta advertising strategist in 2026. Your job is to generate exactly 10 distinct, test-ready image ad concepts for this product and niche.
+
+PRODUCT & BRAND CONTEXT:
+Brand: ${analysis.brandName || 'Brand'}
+Product: ${analysis.productName || 'Product'}
+Target Niche: ${niche}
+Transformation: ${analysis.transformation?.summary || ''}
+USPs: ${analysis.USPs?.slice(0, 6).join(' | ') || ''}
+Emotional Motivations: ${analysis.emotionalWhy?.slice(0, 4).join(' | ') || ''}
+Rational Reasons: ${analysis.rationalWhy?.slice(0, 4).join(' | ') || ''}
+Top Objections: ${analysis.objections?.slice(0, 3).map(o => o.objection).join(' | ') || ''}
+Tone: ${analysis.toneOfVoice?.slice(0, 3).join(', ') || ''}
+Target Audience: ${analysis.targetAudience?.demographics || ''}
+
+REQUIREMENTS:
+- Produce exactly 10 concepts that are meaningfully different from each other — cover 10 distinct angles, not variations of the same idea
+- Every concept must be deeply specific to the niche "${niche}" — no generic ad copy
+- Optimise for Meta feed & stories in 2026 (Andromeda AI delivery): creative variety is the lever, so each angle should be a distinct scroll-stopping idea
+- IMAGE STATIC ADS ONLY. Do not suggest video, reels, carousels, or any animated format under any circumstances
+
+Draw from these angle categories (use a varied mix across the 10):
+Positioning: Us vs Them, For/Not For, Anti-feature manifesto, Status/aspiration, Values-first
+Problem-led: Pain Agitate Relief, Before/After transformation, 3 Mistakes/5 Signs, Myth vs Fact, "I tried everything" frustration-to-breakthrough
+Product proof: Single-USP hammer, Feature→benefit translation, Side-by-side comparison, "What's inside" breakdown, "Why it costs what it costs"
+Social proof: UGC testimonial style, Customer story arc, Review highlight, Case study with numbers
+Objection crushers: FAQ rapid-fire, Price anchoring ("cost per use"), Guarantee reversal, "What to expect"
+Offer/urgency: Bundle value stack, Bonus-stack, Trial/starter kit framing
+Pattern interrupts: Cold open contradiction ("Stop doing X if you want Y"), Unexpected POV, Satisfying/ASMR visual concept, Reply-to-comment style
+
+For each concept the "imageCreativeDirection" must include:
+- Format/style (e.g. bold text overlay on product, before/after split panel, quote card with customer photo, hero product shot with headline, collage, greenscreen text overlay)
+- Visual composition (what is shown, where, how it's arranged, mood/lighting)
+- Headline direction: style cue + a specific example headline written for this exact niche and product
+- Opening hook line (first piece of copy the eye lands on)
+- CTA style and suggested CTA text
+
+RESPOND WITH ONLY a valid JSON array of exactly 10 objects. No markdown, no code blocks, no preamble:
+[
+  {
+    "conceptName": "short descriptive name (3–6 words)",
+    "adAngle": "angle category name",
+    "audienceInsight": "a specific, concrete insight about this exact niche — not generic platitudes",
+    "promiseBenefit": "one clear, specific, measurable-feeling outcome",
+    "hookAngle": "the big idea and exactly why it stops the scroll for this audience",
+    "proofFrame": "how the claim is made believable — mechanism, numbers, testimonial, demonstration, guarantee, before/after, process, etc. If proof is unavailable, propose a credible placeholder.",
+    "imageCreativeDirection": "detailed image creative brief covering format, visual composition, headline direction with example, opening hook line, and CTA"
+  }
+]`;
+}
+
+// =============================================================================
+// AUTO AD IMAGE PROMPT — builds image generation prompt from one concept
+// =============================================================================
+function buildAutoAdPrompt(concept, analysis, niche) {
+    return `You are generating a high-converting static image ad for Meta (Facebook/Instagram) in 2026.
+
+IMAGE 1 (attached) = PRODUCT PHOTO — use this as the hero product image in the ad.
+
+AD CONCEPT TO EXECUTE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Angle: ${concept.adAngle}
+Concept Name: ${concept.conceptName}
+Audience Insight: ${concept.audienceInsight}
+Promise/Benefit: ${concept.promiseBenefit}
+Hook/Angle: ${concept.hookAngle}
+Proof Frame: ${concept.proofFrame}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+IMAGE CREATIVE DIRECTION (follow this precisely):
+${concept.imageCreativeDirection}
+
+PRODUCT: ${analysis.productName || 'Product'}
+BRAND: ${analysis.brandName || 'Brand'}
+TARGET NICHE: ${niche}
+TONE: ${analysis.toneOfVoice?.[0] || 'Professional and compelling'}
+
+ABSOLUTE RULES:
+1. ASPECT RATIO: Vertical 9:16 portrait (1080×1920) — optimised for Stories and Feed
+2. STATIC IMAGE: This is a still image ad, not a video or animation frame
+3. NO LOGOS: Do not add any brand logos, company marks, or watermarks — only logos already on the product photo itself
+4. PRODUCT IMAGE: The product photo (IMAGE 1) must be the visual hero — feature it clearly and prominently
+5. NICHE SPECIFIC: Every visual and copy element must feel directly relevant to "${niche}"
+6. SCROLL-STOPPING: Prioritise bold, high-contrast design optimised for mobile thumb-stop`;
+}
+
+// =============================================================================
+// AUTO GENERATION — 10 AI-generated concepts, no templates
+// =============================================================================
+async function startAutoGeneration() {
+    const url   = document.getElementById('url-input').value.trim();
+    const niche = document.getElementById('niche-input').value.trim();
+
+    if (!url)   { showFormError('Please enter a landing page URL.'); return; }
+    if (!niche) { showFormError('Please enter a target niche.'); return; }
+    if (!apiKey){ showState('setup-state'); return; }
+
+    lastUrl   = url;
+    lastNiche = niche;
+    hideFormError();
+
+    // Reset progress UI
+    ['step-fetch', 'step-analyze', 'step-image', 'step-gen'].forEach(id => {
+        const el = document.getElementById(id);
+        el.classList.remove('active', 'done', 'error');
+        const icons = { 'step-fetch': '🌐', 'step-analyze': '🧠', 'step-image': '🖼', 'step-gen': '✨' };
+        document.getElementById(id + '-icon').textContent = icons[id];
+    });
+
+    document.getElementById('progress-subtitle').textContent =
+        'Generating 10 unique ad concepts then creating each image — allow 5–8 minutes.';
+
+    setProgress(0);
+    generatedAds = [];
+    templateAnalysisCache.clear();
+    document.getElementById('ads-grid').innerHTML = '';
+    showState('progress-state');
+
+    try {
+        // ── Step 1: Read landing page ───────────────────────────────────────
+        setStepActive('step-fetch');
+        updateDetail('step-fetch', 'Sending URL to Gemini...');
+
+        let rawAnalysis = null;
+        let fallbackOgImage = null;
+
+        try {
+            rawAnalysis = await geminiTextWithUrl(buildAnalysisPromptDirect(url, niche));
+            setStepDone('step-fetch', 'Page read by Gemini ✓');
+        } catch (_) {
+            updateDetail('step-fetch', 'Trying CORS proxy fallback...');
+            const page = await fetchPage(url);
+            fallbackOgImage = page.ogImage;
+            setStepDone('step-fetch', `Fetched · ${(page.bodyText.length / 1000).toFixed(1)}k chars`);
+            setProgress(10);
+            setStepActive('step-analyze');
+            rawAnalysis = await geminiText(buildAnalysisPrompt(url, niche, page.bodyText, page.ogImage));
+        }
+
+        setProgress(10);
+
+        // ── Step 2: Parse analysis ──────────────────────────────────────────
+        setStepActive('step-analyze');
+        updateDetail('step-analyze', 'Parsing brand analysis...');
+
+        let analysis;
+        try {
+            const cleaned = rawAnalysis.replace(/^```json?\s*/i, '').replace(/\s*```$/i, '').trim();
+            analysis = JSON.parse(cleaned);
+        } catch (_) {
+            throw new Error('Analysis returned unexpected format. Please try again.');
+        }
+
+        if (!analysis.productImageUrl && fallbackOgImage) analysis.productImageUrl = fallbackOgImage;
+
+        setStepDone('step-analyze', `${analysis.brandName || 'Brand'} · brand analysis complete`);
+        setProgress(20);
+
+        // ── Step 3: Product image ───────────────────────────────────────────
+        setStepActive('step-image');
+        const imgUrl = analysis.productImageUrl;
+        updateDetail('step-image', imgUrl ? 'Downloading product image...' : 'No product image found...');
+
+        let productImgB64 = null;
+        if (imgUrl) productImgB64 = await urlToBase64(imgUrl);
+
+        setStepDone('step-image', productImgB64 ? '✓ Product image ready' : 'Proceeding without product image');
+        setProgress(25);
+
+        // ── Step 4: Generate 10 ad concepts ────────────────────────────────
+        setStepActive('step-gen');
+        updateDetail('step-gen', 'Generating 10 distinct ad concepts...');
+
+        const rawConcepts = await geminiText(buildAutoConceptsPrompt(analysis, niche));
+
+        let concepts;
+        try {
+            const cleaned = rawConcepts.replace(/^```json?\s*/i, '').replace(/\s*```$/i, '').trim();
+            concepts = JSON.parse(cleaned);
+            if (!Array.isArray(concepts) || concepts.length === 0) throw new Error();
+        } catch (_) {
+            throw new Error('Concept generation returned unexpected format. Please try again.');
+        }
+
+        setProgress(35);
+
+        // ── Step 5: Generate one image per concept ──────────────────────────
+        const total = concepts.length;
+
+        for (let i = 0; i < total; i++) {
+            const concept = concepts[i];
+            updateDetail('step-gen',
+                `Generating ad ${i + 1} of ${total} — ${concept.conceptName || concept.adAngle}...`);
+
+            const parts = [{ text: buildAutoAdPrompt(concept, analysis, niche) }];
+
+            // Attach product image (no template — this is the templateless flow)
+            if (productImgB64) {
+                parts.push({
+                    inlineData: {
+                        mimeType: productImgB64.match(/data:([^;]+)/)?.[1] || 'image/jpeg',
+                        data: productImgB64.split(',')[1]
+                    }
+                });
+            }
+
+            const adImg = await geminiImage(parts);
+
+            if (adImg) {
+                generatedAds.push({ src: adImg, template: null, angle: concept.adAngle, headline: concept.hookAngle });
+                appendAdCard(adImg, i + 1, concept.conceptName || concept.adAngle);
+            }
+
+            setProgress(35 + 65 * (i + 1) / total);
+        }
+
+        setStepDone('step-gen', `${generatedAds.length} ad${generatedAds.length !== 1 ? 's' : ''} generated`);
+        setProgress(100);
+
+        document.getElementById('results-meta').textContent =
+            `${generatedAds.length} ads · ${niche} · AI-generated concepts`;
+
+        // Reset subtitle for next time
+        document.getElementById('progress-subtitle').textContent =
+            'This takes 1–3 minutes depending on the number of templates selected.';
+
+        await new Promise(r => setTimeout(r, 500));
+        showState('results-state');
+
+    } catch (err) {
+        console.error(err);
+        ['step-gen', 'step-image', 'step-analyze', 'step-fetch'].forEach(id => {
+            if (document.getElementById(id).classList.contains('active')) {
+                setStepError(id, err.message);
+            }
+        });
+        document.getElementById('progress-subtitle').textContent =
+            'This takes 1–3 minutes depending on the number of templates selected.';
+        await new Promise(r => setTimeout(r, 2500));
+        showState('form-state');
+        showFormError('Error: ' + err.message);
+    }
 }
 
 // =============================================================================
