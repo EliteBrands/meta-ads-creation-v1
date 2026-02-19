@@ -662,11 +662,12 @@ const PROXIES = [
 // =============================================================================
 // APP STATE
 // =============================================================================
-let apiKey         = localStorage.getItem('gemini_api_key') || '';
-let generatedAds   = [];
-let selectedTempls = new Set();
-let lastUrl        = '';
-let lastNiche      = '';
+let apiKey               = localStorage.getItem('gemini_api_key') || '';
+let generatedAds         = [];
+let selectedTempls       = new Set();
+let lastUrl              = '';
+let lastNiche            = '';
+let templateAnalysisCache = new Map(); // filename → analysis object
 
 // =============================================================================
 // UI HELPERS
@@ -854,6 +855,63 @@ async function geminiImage(parts) {
     const imgPart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
     if (!imgPart) return null;
     return `data:${imgPart.inlineData.mimeType};base64,${imgPart.inlineData.data}`;
+}
+
+// =============================================================================
+// TEMPLATE CONCEPT ANALYSIS (cheap Flash call before image generation)
+// =============================================================================
+async function analyzeTemplate(tmplBase64, tmplFilename) {
+    // Return cached result if we've already analysed this template
+    if (tmplFilename && templateAnalysisCache.has(tmplFilename)) {
+        return templateAnalysisCache.get(tmplFilename);
+    }
+
+    const mimeType = tmplBase64.match(/data:([^;]+)/)?.[1] || 'image/jpeg';
+    const url = `${GEMINI_API}${MODEL_TEXT}:generateContent?key=${apiKey}`;
+
+    const prompt = `You are an expert Meta/Facebook ad creative strategist. Analyze this ad template image.
+
+Identify the following and respond ONLY with a valid JSON object (no markdown, no code blocks):
+
+{
+  "adFormat": "the primary format — choose exactly one: Breaking Headline | Us vs Them | USP Callouts | Social Proof / Reviews | Before / After | Problem / Solution | Lifestyle / Aspirational | Offer / Discount | Tutorial / How-to | UGC Style",
+  "adConcept": "1-2 sentence description of the strategic concept and what makes this ad format work",
+  "layoutDescription": "describe the visual hierarchy and where key elements are positioned (headline, image, CTA, logo)",
+  "textZones": ["list each text zone visible, e.g. 'large top headline', 'bullet point list', 'CTA button', 'bottom logo'"],
+  "copyApproach": "describe the copywriting strategy and tone (e.g. direct response, emotional, fear-based, curiosity gap, social proof)",
+  "keyInstructions": "2-3 specific instructions for recreating this exact ad concept with different product content — what MUST be preserved to honour this format"
+}`;
+
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [
+                        { text: prompt },
+                        { inlineData: { mimeType, data: tmplBase64.split(',')[1] } }
+                    ]
+                }],
+                generationConfig: { temperature: 0.2, maxOutputTokens: 1024 }
+            })
+        });
+
+        if (!res.ok) return null;
+
+        const data = await res.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        const cleaned = text.replace(/^```json?\s*/i, '').replace(/\s*```$/i, '').trim();
+        const parsed = JSON.parse(cleaned);
+
+        // Cache for reuse
+        if (tmplFilename) templateAnalysisCache.set(tmplFilename, parsed);
+        return parsed;
+
+    } catch (_) {
+        return null; // Non-fatal — ad generation continues without concept context
+    }
 }
 
 // =============================================================================
@@ -1161,11 +1219,28 @@ Use this exact structure:
 // =============================================================================
 // AD IMAGE GENERATION PROMPT
 // =============================================================================
-function buildAdPrompt(analysis, niche, adAngle, headline) {
+function buildAdPrompt(analysis, niche, adAngle, headline, templateConcept) {
+
+    // Inject template concept analysis if available
+    const conceptBlock = templateConcept ? `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TEMPLATE CONCEPT ANALYSIS (CRITICAL — follow this exactly)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Ad Format: ${templateConcept.adFormat}
+Concept: ${templateConcept.adConcept}
+Layout: ${templateConcept.layoutDescription}
+Text Zones: ${Array.isArray(templateConcept.textZones) ? templateConcept.textZones.join(' | ') : templateConcept.textZones}
+Copy Approach: ${templateConcept.copyApproach}
+Key Instructions: ${templateConcept.keyInstructions}
+
+IMPORTANT: This ad MUST use the "${templateConcept.adFormat}" format.
+Replicate the exact concept, layout structure, and copy approach — but with the product/brand content below.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` : '';
+
     return `You are an expert social media ad creative designer specialising in high-converting Meta (Facebook & Instagram) ad creatives.
 
 Create a vertical 9:16 social media ad image with the following brief:
-
+${conceptBlock}
 PRODUCT: ${analysis.productName || 'Product'}
 BRAND: ${analysis.brandName || 'Brand'}
 TARGET NICHE: ${niche}
@@ -1177,8 +1252,8 @@ AUDIENCE: ${analysis.targetAudience?.demographics || ''}
 
 CREATIVE INSTRUCTIONS:
 - Design a high-converting vertical ad (9:16 aspect ratio — portrait format for Stories/Reels)
-- If a reference template image is provided (first attached image), closely match its layout, composition, typography style, and visual hierarchy
-- If a product image is provided (second attached image), feature it prominently as the hero element
+- If a reference template image is provided, match its visual composition and typography style precisely
+- If a product image is provided, feature it prominently as the hero element
 - The headline "${headline}" should be the dominant text element, large and legible
 - Include a clear call-to-action button or text
 - Design should feel native to Instagram Stories / Facebook Stories / Reels
@@ -1211,6 +1286,7 @@ async function startGeneration() {
 
     setProgress(0);
     generatedAds = [];
+    templateAnalysisCache.clear();
     document.getElementById('ads-grid').innerHTML = '';
     showState('progress-state');
 
@@ -1289,18 +1365,26 @@ async function startGeneration() {
 
         for (let i = 0; i < total; i++) {
             const tmpl = templates[i];
-            updateDetail('step-gen', `Generating ad ${i + 1} of ${total}${tmpl ? ` (${tmpl})` : ''}...`);
 
             // Load template image if selected
             let tmplB64 = null;
             if (tmpl) tmplB64 = await urlToBase64(`templates/${tmpl}`);
 
-            // Build prompt inputs
+            // Analyse template concept with Gemini Flash (cheap call — understands the ad angle/format)
+            let templateConcept = null;
+            if (tmplB64) {
+                updateDetail('step-gen', `Analysing template ${i + 1} of ${total}...`);
+                templateConcept = await analyzeTemplate(tmplB64, tmpl);
+            }
+
+            updateDetail('step-gen', `Generating ad ${i + 1} of ${total}${tmpl ? ` (${templateConcept?.adFormat || tmpl})` : ''}...`);
+
+            // Build prompt inputs — use template concept to pick the most fitting angle/headline
             const adAngle  = analysis.adAngles?.[i % Math.max(analysis.adAngles?.length || 1, 1)] || 'key benefit focused';
             const headline = analysis.suggestedHeadlines?.[i % Math.max(analysis.suggestedHeadlines?.length || 1, 1)]
                           || analysis.USPs?.[0] || 'See the difference today';
 
-            const parts = [{ text: buildAdPrompt(analysis, niche, adAngle, headline) }];
+            const parts = [{ text: buildAdPrompt(analysis, niche, adAngle, headline, templateConcept) }];
 
             // Attach product image
             if (productImgB64) {
@@ -1326,7 +1410,7 @@ async function startGeneration() {
 
             if (adImg) {
                 generatedAds.push({ src: adImg, template: tmpl, angle: adAngle, headline });
-                appendAdCard(adImg, i + 1, adAngle);
+                appendAdCard(adImg, i + 1, templateConcept?.adFormat || adAngle);
             }
 
             setProgress(45 + 55 * (i + 1) / total);
