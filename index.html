@@ -858,7 +858,7 @@ async function geminiImage(parts) {
 }
 
 // =============================================================================
-// TEMPLATE CONCEPT ANALYSIS (cheap Flash call before image generation)
+// TEMPLATE CONCEPT ANALYSIS (cheap Flash call — extracts precise layout blueprint)
 // =============================================================================
 async function analyzeTemplate(tmplBase64, tmplFilename) {
     // Return cached result if we've already analysed this template
@@ -869,17 +869,29 @@ async function analyzeTemplate(tmplBase64, tmplFilename) {
     const mimeType = tmplBase64.match(/data:([^;]+)/)?.[1] || 'image/jpeg';
     const url = `${GEMINI_API}${MODEL_TEXT}:generateContent?key=${apiKey}`;
 
-    const prompt = `You are an expert Meta/Facebook ad creative strategist. Analyze this ad template image.
+    const prompt = `You are a precise visual layout analyst. Study this ad template image carefully and extract its exact layout blueprint so it can be reproduced with different product content.
 
-Identify the following and respond ONLY with a valid JSON object (no markdown, no code blocks):
+Respond ONLY with a valid JSON object (no markdown, no code blocks):
 
 {
-  "adFormat": "the primary format — choose exactly one: Breaking Headline | Us vs Them | USP Callouts | Social Proof / Reviews | Before / After | Problem / Solution | Lifestyle / Aspirational | Offer / Discount | Tutorial / How-to | UGC Style",
-  "adConcept": "1-2 sentence description of the strategic concept and what makes this ad format work",
-  "layoutDescription": "describe the visual hierarchy and where key elements are positioned (headline, image, CTA, logo)",
-  "textZones": ["list each text zone visible, e.g. 'large top headline', 'bullet point list', 'CTA button', 'bottom logo'"],
-  "copyApproach": "describe the copywriting strategy and tone (e.g. direct response, emotional, fear-based, curiosity gap, social proof)",
-  "keyInstructions": "2-3 specific instructions for recreating this exact ad concept with different product content — what MUST be preserved to honour this format"
+  "adFormat": "choose exactly one: Breaking Headline | Us vs Them | USP Callouts | Social Proof / Reviews | Before / After | Problem / Solution | Lifestyle / Aspirational | Offer / Discount | Tutorial / How-to | UGC Style",
+  "adConcept": "1-2 sentences on the strategic concept — what this format does to persuade the viewer",
+  "backgroundTreatment": "exact description: e.g. 'solid dark navy #1a2333', 'lifestyle photo with 60% dark overlay', 'white background with coral accent strip at bottom'",
+  "colorPalette": ["primary bg color", "text color", "accent/CTA color", "secondary color"],
+  "layoutZones": [
+    {
+      "zone": "descriptive name e.g. 'hero headline', 'product image', 'bullet benefit list', 'CTA button'",
+      "verticalPosition": "approximate % from top, e.g. '0–15%' or '60–80%'",
+      "horizontalAlignment": "left / center / right / full-width",
+      "description": "exactly what appears here and how it is visually treated",
+      "textStyle": "if text zone: size (huge/large/medium/small), weight (bold/regular), case (ALL CAPS/Title Case/sentence), color"
+    }
+  ],
+  "productImagePlacement": "describe exactly how/where the product photo is shown, or null if none",
+  "hasLogo": true or false,
+  "logoDescription": "where logo appears and how it looks, or null",
+  "copyApproach": "the copywriting angle and tone",
+  "contentSwapRules": "3-4 specific rules that MUST be followed when replacing content — what defines this template's identity"
 }`;
 
     try {
@@ -893,7 +905,7 @@ Identify the following and respond ONLY with a valid JSON object (no markdown, n
                         { inlineData: { mimeType, data: tmplBase64.split(',')[1] } }
                     ]
                 }],
-                generationConfig: { temperature: 0.2, maxOutputTokens: 1024 }
+                generationConfig: { temperature: 0.1, maxOutputTokens: 1500 }
             })
         });
 
@@ -905,12 +917,12 @@ Identify the following and respond ONLY with a valid JSON object (no markdown, n
         const cleaned = text.replace(/^```json?\s*/i, '').replace(/\s*```$/i, '').trim();
         const parsed = JSON.parse(cleaned);
 
-        // Cache for reuse
+        // Cache for reuse within this generation run
         if (tmplFilename) templateAnalysisCache.set(tmplFilename, parsed);
         return parsed;
 
     } catch (_) {
-        return null; // Non-fatal — ad generation continues without concept context
+        return null; // Non-fatal — generation continues without layout blueprint
     }
 }
 
@@ -1221,44 +1233,61 @@ Use this exact structure:
 // =============================================================================
 function buildAdPrompt(analysis, niche, adAngle, headline, templateConcept) {
 
-    // Inject template concept analysis if available
-    const conceptBlock = templateConcept ? `
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TEMPLATE CONCEPT ANALYSIS (CRITICAL — follow this exactly)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    const hasTemplate = !!templateConcept;
+
+    // Build zone-by-zone layout instructions from the blueprint
+    let zoneInstructions = '';
+    if (hasTemplate && Array.isArray(templateConcept.layoutZones)) {
+        zoneInstructions = templateConcept.layoutZones.map(z =>
+            `  • [${z.verticalPosition || ''}] ${z.zone}: ${z.description}${z.textStyle ? ` — text style: ${z.textStyle}` : ''}`
+        ).join('\n');
+    }
+
+    const templateBlock = hasTemplate ? `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LAYOUT BLUEPRINT — reproduce this EXACTLY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 Ad Format: ${templateConcept.adFormat}
-Concept: ${templateConcept.adConcept}
-Layout: ${templateConcept.layoutDescription}
-Text Zones: ${Array.isArray(templateConcept.textZones) ? templateConcept.textZones.join(' | ') : templateConcept.textZones}
+Strategic Concept: ${templateConcept.adConcept}
+Background: ${templateConcept.backgroundTreatment}
+Colours: ${Array.isArray(templateConcept.colorPalette) ? templateConcept.colorPalette.join(', ') : templateConcept.colorPalette}
 Copy Approach: ${templateConcept.copyApproach}
-Key Instructions: ${templateConcept.keyInstructions}
 
-IMPORTANT: This ad MUST use the "${templateConcept.adFormat}" format.
-Replicate the exact concept, layout structure, and copy approach — but with the product/brand content below.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` : '';
+LAYOUT ZONES (replicate positions, sizes, and styling precisely):
+${zoneInstructions}
 
-    return `You are an expert social media ad creative designer specialising in high-converting Meta (Facebook & Instagram) ad creatives.
+Product Image Placement: ${templateConcept.productImagePlacement || 'match template'}
+Content Swap Rules: ${templateConcept.contentSwapRules}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` : '';
 
-Create a vertical 9:16 social media ad image with the following brief:
-${conceptBlock}
+    const imageNote = hasTemplate
+        ? `IMAGE 1 (first attached) = LAYOUT TEMPLATE — your pixel-faithful visual blueprint.
+IMAGE 2 (second attached, if present) = PRODUCT PHOTO — use this as the product image in the output.`
+        : `IMAGE 1 (attached) = PRODUCT PHOTO — feature this prominently as the hero.`;
+
+    return `You are performing a CONTENT SWAP on an ad template. This is NOT a new design — it is a faithful reproduction of the template layout with new product content.
+
+${imageNote}
+${templateBlock}
+
+NEW CONTENT TO INSERT:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PRODUCT: ${analysis.productName || 'Product'}
 BRAND: ${analysis.brandName || 'Brand'}
 TARGET NICHE: ${niche}
 AD ANGLE: ${adAngle}
 HEADLINE: "${headline}"
-KEY USP: ${analysis.USPs?.[0] || analysis.rationalWhy?.[0] || ''}
+KEY BENEFIT: ${analysis.USPs?.[0] || analysis.rationalWhy?.[0] || ''}
 TONE: ${analysis.toneOfVoice?.[0] || 'Professional and compelling'}
-AUDIENCE: ${analysis.targetAudience?.demographics || ''}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-CREATIVE INSTRUCTIONS:
-- Design a high-converting vertical ad (9:16 aspect ratio — portrait format for Stories/Reels)
-- If a reference template image is provided, match its visual composition and typography style precisely
-- If a product image is provided, feature it prominently as the hero element
-- The headline "${headline}" should be the dominant text element, large and legible
-- Include a clear call-to-action button or text
-- Design should feel native to Instagram Stories / Facebook Stories / Reels
-- Professional quality, suitable for paid media placement
-- Optimised visually for the target audience: ${niche}`;
+ABSOLUTE RULES — never break these:
+1. LAYOUT: Every element stays in the exact same position as the template — same zones, same proportions, same visual hierarchy
+2. STYLE: Use the identical background treatment, colour palette, and typography style as the template
+3. NO LOGOS: Do NOT add any brand logos, company marks, or watermarks. The only logos permitted are any already visible on the product photo itself
+4. NO INVENTION: Do not add decorative elements, borders, icons, or shapes that are not in the template
+5. PRODUCT IMAGE: Place the product photo exactly where the template shows a product/hero image — same size, same position, same treatment (e.g. if template has product on white background floating in top half, do the same)
+6. ASPECT RATIO: Output must be vertical 9:16 (portrait, 1080×1920)`;
 }
 
 // =============================================================================
@@ -1386,22 +1415,22 @@ async function startGeneration() {
 
             const parts = [{ text: buildAdPrompt(analysis, niche, adAngle, headline, templateConcept) }];
 
-            // Attach product image
-            if (productImgB64) {
-                parts.push({
-                    inlineData: {
-                        mimeType: productImgB64.match(/data:([^;]+)/)?.[1] || 'image/jpeg',
-                        data: productImgB64.split(',')[1]
-                    }
-                });
-            }
-
-            // Attach template image
+            // IMAGE 1: template goes FIRST (it is the layout master)
             if (tmplB64) {
                 parts.push({
                     inlineData: {
                         mimeType: tmplB64.match(/data:([^;]+)/)?.[1] || 'image/jpeg',
                         data: tmplB64.split(',')[1]
+                    }
+                });
+            }
+
+            // IMAGE 2: product image goes SECOND
+            if (productImgB64) {
+                parts.push({
+                    inlineData: {
+                        mimeType: productImgB64.match(/data:([^;]+)/)?.[1] || 'image/jpeg',
+                        data: productImgB64.split(',')[1]
                     }
                 });
             }
