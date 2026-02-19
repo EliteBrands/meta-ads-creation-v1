@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meta Ads Creator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #09090f;
+            color: #f1f0ff;
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+
+        .app {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+
+        /* State visibility */
+        .state { display: none; }
+        .state.active { display: block; }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 32px;
+        }
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .header-title h1 {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: -0.4px;
+        }
+        .header-title .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #7c3aed;
+            flex-shrink: 0;
+        }
+
+        /* Cards */
+        .card {
+            background: #13131f;
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 12px;
+            padding: 28px;
+        }
+
+        /* Form elements */
+        label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            color: #8080a8;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+        }
+
+        input[type="text"], input[type="url"], input[type="password"] {
+            width: 100%;
+            background: #0d0d18;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: #f1f0ff;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+            outline: none;
+        }
+        input:focus { border-color: #7c3aed; }
+        input::placeholder { color: #404060; }
+
+        .field { margin-bottom: 20px; }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            border: none;
+            transition: all 0.15s;
+            text-decoration: none;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #6d28d9, #4f46e5);
+            color: white;
+        }
+        .btn-primary:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(109,40,217,0.35); }
+        .btn-secondary {
+            background: rgba(255,255,255,0.06);
+            color: #c0c0e0;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .btn-secondary:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+        .btn-sm { padding: 7px 14px; font-size: 13px; }
+
+        /* ===== SETUP STATE ===== */
+        #setup-state {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            min-height: 80vh;
+        }
+        #setup-state.active { display: flex; }
+
+        .setup-card {
+            background: #13131f;
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 16px;
+            padding: 40px;
+            width: 100%;
+            max-width: 460px;
+            text-align: center;
+        }
+        .setup-logo {
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, #6d28d9, #4f46e5);
+            border-radius: 14px;
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+        }
+        .setup-card h2 { font-size: 22px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.5px; }
+        .setup-card > p { color: #8080a8; font-size: 14px; margin-bottom: 28px; line-height: 1.6; }
+        .setup-card .field { text-align: left; }
+        .setup-help { margin-top: 14px; font-size: 12px; color: #50507a; }
+        .setup-help a { color: #7c3aed; text-decoration: none; }
+        .setup-help a:hover { text-decoration: underline; }
+
+        /* ===== FORM STATE ===== */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        @media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } }
+
+        .section-divider {
+            border: none;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            margin: 24px 0;
+        }
+
+        .templates-label-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .templates-label-row label { margin-bottom: 0; }
+        .templates-hint { font-size: 12px; color: #505070; }
+
+        .templates-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+            gap: 10px;
+        }
+
+        .template-card {
+            position: relative;
+            cursor: pointer;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid rgba(255,255,255,0.08);
+            aspect-ratio: 9/16;
+            background: #1a1a2e;
+            transition: border-color 0.15s, transform 0.15s;
+        }
+        .template-card:hover { border-color: rgba(124,58,237,0.5); transform: scale(1.02); }
+        .template-card.selected { border-color: #7c3aed; }
+        .template-card .check-badge {
+            display: none;
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 20px;
+            height: 20px;
+            background: #7c3aed;
+            border-radius: 50%;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: white;
+        }
+        .template-card.selected .check-badge { display: flex; }
+        .template-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .template-name {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 4px 6px;
+            background: rgba(0,0,0,0.65);
+            font-size: 10px;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: #c0c0e0;
+        }
+
+        .no-templates {
+            padding: 28px 20px;
+            text-align: center;
+            color: #50507a;
+            font-size: 13px;
+            background: rgba(255,255,255,0.02);
+            border: 1px dashed rgba(255,255,255,0.08);
+            border-radius: 8px;
+            line-height: 1.7;
+        }
+        .no-templates code {
+            background: rgba(255,255,255,0.07);
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+
+        .form-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 24px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .selection-info { font-size: 13px; color: #505070; }
+
+        /* Settings gear button */
+        .icon-btn {
+            background: none;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 7px;
+            padding: 8px 10px;
+            cursor: pointer;
+            color: #606080;
+            font-size: 15px;
+            line-height: 1;
+            transition: all 0.15s;
+        }
+        .icon-btn:hover { color: #d0d0f0; border-color: rgba(255,255,255,0.2); }
+
+        /* Error banner */
+        .error-banner {
+            display: none;
+            background: rgba(239,68,68,0.08);
+            border: 1px solid rgba(239,68,68,0.25);
+            border-radius: 8px;
+            padding: 11px 16px;
+            font-size: 13px;
+            color: #fca5a5;
+            margin-bottom: 20px;
+        }
+        .error-banner.visible { display: block; }
+
+        /* ===== PROGRESS STATE ===== */
+        .progress-wrap {
+            max-width: 580px;
+            margin: 60px auto;
+        }
+        .progress-header {
+            margin-bottom: 36px;
+        }
+        .progress-header h2 {
+            font-size: 22px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            letter-spacing: -0.4px;
+        }
+        .progress-header p { color: #7070a0; font-size: 14px; }
+
+        .progress-steps { list-style: none; }
+
+        .step-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 10px 0;
+            position: relative;
+        }
+        .step-item:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 46px;
+            width: 2px;
+            height: calc(100% - 16px);
+            background: rgba(255,255,255,0.07);
+        }
+
+        .step-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 15px;
+            background: rgba(255,255,255,0.04);
+            border: 2px solid rgba(255,255,255,0.08);
+            transition: all 0.3s;
+        }
+        .step-item.active .step-icon {
+            background: rgba(124,58,237,0.15);
+            border-color: #7c3aed;
+            animation: stepPulse 1.5s ease-in-out infinite;
+        }
+        .step-item.done .step-icon {
+            background: rgba(16,185,129,0.12);
+            border-color: #10b981;
+            font-size: 14px;
+        }
+        .step-item.error .step-icon {
+            background: rgba(239,68,68,0.12);
+            border-color: #ef4444;
+            font-size: 14px;
+        }
+        @keyframes stepPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(124,58,237,0); }
+            50% { box-shadow: 0 0 0 5px rgba(124,58,237,0.2); }
+        }
+
+        .step-body { flex: 1; padding-top: 4px; }
+        .step-body h4 { font-size: 14px; font-weight: 500; line-height: 1.4; }
+        .step-detail { font-size: 12px; color: #60608a; margin-top: 2px; transition: color 0.3s; }
+        .step-item.done .step-detail { color: #4a7a5a; }
+        .step-item.error .step-detail { color: #9a4a4a; }
+
+        .progress-bar-wrap {
+            margin-top: 36px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 4px;
+            height: 3px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #6d28d9, #818cf8);
+            border-radius: 4px;
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            width: 0%;
+        }
+
+        /* ===== RESULTS STATE ===== */
+        .results-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .results-header h2 {
+            font-size: 20px;
+            font-weight: 600;
+            letter-spacing: -0.4px;
+        }
+        .results-meta { font-size: 13px; color: #60608a; margin-top: 2px; }
+        .results-actions { display: flex; gap: 10px; align-items: center; }
+
+        .ads-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .ad-card {
+            background: #13131f;
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .ad-card:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+
+        .ad-image-wrap {
+            aspect-ratio: 9/16;
+            overflow: hidden;
+            background: #0d0d18;
+        }
+        .ad-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+        .ad-footer {
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+        .ad-label { font-size: 11px; color: #60608a; font-weight: 500; }
+        .ad-angle { font-size: 11px; color: #505070; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; }
+
+        /* Spinner */
+        .spinner {
+            display: inline-block;
+            width: 13px;
+            height: 13px;
+            border: 2px solid rgba(255,255,255,0.25);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Toast */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #1e1e2e;
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+            padding: 12px 18px;
+            font-size: 13px;
+            z-index: 999;
+            opacity: 0;
+            transform: translateY(8px);
+            transition: opacity 0.2s, transform 0.2s;
+            pointer-events: none;
+        }
+        .toast.visible { opacity: 1; transform: translateY(0); }
+
+        /* Analysis summary pill */
+        .analysis-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(16,185,129,0.1);
+            border: 1px solid rgba(16,185,129,0.2);
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 12px;
+            color: #6ee7b7;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+
+        <!-- ===== STATE 0: SETUP ===== -->
+        <div id="setup-state" class="state">
+            <div class="setup-card">
+                <div class="setup-logo">✦</div>
+                <h2>Meta Ads Creator</h2>
+                <p>Enter your Gemini API key to get started.<br>It's saved in your browser — never shared.</p>
+                <div class="field">
+                    <label>Gemini API Key</label>
+                    <input type="password" id="api-key-input" placeholder="AIzaSy..." autocomplete="off" />
+                </div>
+                <button class="btn btn-primary" id="save-key-btn" onclick="saveApiKey()" style="width:100%">
+                    Save &amp; Start →
+                </button>
+                <p class="setup-help">
+                    Get your free key at <a href="https://aistudio.google.com/apikey" target="_blank">aistudio.google.com/apikey</a>
+                </p>
+            </div>
+        </div>
+
+        <!-- ===== STATE 1: FORM ===== -->
+        <div id="form-state" class="state">
+            <div class="header">
+                <div class="header-title">
+                    <div class="dot"></div>
+                    <h1>Meta Ads Creator</h1>
+                </div>
+                <button class="icon-btn" onclick="showState('setup-state')" title="Change API key">⚙</button>
+            </div>
+
+            <div class="error-banner" id="form-error"></div>
+
+            <div class="card">
+                <div class="form-grid">
+                    <div class="field">
+                        <label>Landing Page URL</label>
+                        <input type="url" id="url-input" placeholder="https://yourproduct.com" />
+                    </div>
+                    <div class="field">
+                        <label>Target Niche</label>
+                        <input type="text" id="niche-input" placeholder="e.g. fitness enthusiasts aged 25–40" />
+                    </div>
+                </div>
+
+                <hr class="section-divider">
+
+                <div class="templates-label-row">
+                    <label>Ad Templates</label>
+                    <span class="templates-hint">Click to select • one ad generated per template</span>
+                </div>
+                <div id="templates-grid" class="templates-grid">
+                    <div class="no-templates" id="no-templates-msg">
+                        Loading templates...
+                    </div>
+                </div>
+
+                <div class="form-footer">
+                    <span class="selection-info" id="selection-count">No templates selected</span>
+                    <button class="btn btn-primary" id="generate-btn" onclick="startGeneration()">
+                        Generate Ads ✦
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== STATE 2: PROGRESS ===== -->
+        <div id="progress-state" class="state">
+            <div class="progress-wrap">
+                <div class="progress-header">
+                    <h2>Creating your ads...</h2>
+                    <p id="progress-subtitle">This takes 1–3 minutes depending on the number of templates selected.</p>
+                </div>
+
+                <ul class="progress-steps">
+                    <li class="step-item" id="step-fetch">
+                        <div class="step-icon" id="step-fetch-icon">🌐</div>
+                        <div class="step-body">
+                            <h4>Fetching landing page</h4>
+                            <p class="step-detail" id="step-fetch-detail">Retrieving page content...</p>
+                        </div>
+                    </li>
+                    <li class="step-item" id="step-analyze">
+                        <div class="step-icon" id="step-analyze-icon">🧠</div>
+                        <div class="step-body">
+                            <h4>Analyzing brand &amp; niche</h4>
+                            <p class="step-detail" id="step-analyze-detail">Running 9-section brand analysis...</p>
+                        </div>
+                    </li>
+                    <li class="step-item" id="step-image">
+                        <div class="step-icon" id="step-image-icon">🖼</div>
+                        <div class="step-body">
+                            <h4>Extracting product image</h4>
+                            <p class="step-detail" id="step-image-detail">Locating product visuals...</p>
+                        </div>
+                    </li>
+                    <li class="step-item" id="step-gen">
+                        <div class="step-icon" id="step-gen-icon">✨</div>
+                        <div class="step-body">
+                            <h4>Generating ads with Gemini</h4>
+                            <p class="step-detail" id="step-gen-detail">Waiting...</p>
+                        </div>
+                    </li>
+                </ul>
+
+                <div class="progress-bar-wrap">
+                    <div class="progress-bar" id="progress-bar"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ===== STATE 3: RESULTS ===== -->
+        <div id="results-state" class="state">
+            <div class="results-header">
+                <div>
+                    <h2>Your Ads are Ready</h2>
+                    <p class="results-meta" id="results-meta"></p>
+                </div>
+                <div class="results-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="goBackToForm()">← New Generation</button>
+                    <button class="btn btn-primary btn-sm" id="download-all-btn" onclick="downloadAll()">⬇ Download All</button>
+                </div>
+            </div>
+            <div id="ads-grid" class="ads-grid"></div>
+        </div>
+
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3/dist/jszip.min.js"></script>
+    <script>
+
+// =============================================================================
+// CONFIGURATION — Update TEMPLATE_FILES when you add images to /templates/
+// =============================================================================
+const TEMPLATE_FILES = [
+    // 'template-01.jpg',
+    // 'template-02.jpg',
+    // 'template-03.jpg',
+    // Add your template filenames here, or create templates/manifest.json
+];
+
+const MODEL_TEXT  = 'gemini-2.0-flash';
+const MODEL_IMAGE = 'gemini-3-pro-image-preview';
+const GEMINI_API  = 'https://generativelanguage.googleapis.com/v1beta/models/';
+const PROXY       = 'https://api.allorigins.win/raw?url=';
+
+// =============================================================================
+// APP STATE
+// =============================================================================
+let apiKey         = localStorage.getItem('gemini_api_key') || '';
+let generatedAds   = [];
+let selectedTempls = new Set();
+let lastUrl        = '';
+let lastNiche      = '';
+
+// =============================================================================
+// UI HELPERS
+// =============================================================================
+function showState(id) {
+    document.querySelectorAll('.state').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+}
+
+function setStepActive(id) {
+    document.getElementById(id).classList.add('active');
+}
+function setStepDone(id, detail) {
+    const el = document.getElementById(id);
+    el.classList.remove('active');
+    el.classList.add('done');
+    document.getElementById(id + '-icon').textContent = '✓';
+    if (detail) document.getElementById(id + '-detail').textContent = detail;
+}
+function setStepError(id, msg) {
+    const el = document.getElementById(id);
+    el.classList.remove('active');
+    el.classList.add('error');
+    document.getElementById(id + '-icon').textContent = '✕';
+    if (msg) document.getElementById(id + '-detail').textContent = msg;
+}
+function updateDetail(id, msg) {
+    document.getElementById(id + '-detail').textContent = msg;
+}
+function setProgress(pct) {
+    document.getElementById('progress-bar').style.width = Math.min(pct, 100) + '%';
+}
+
+function showFormError(msg) {
+    const el = document.getElementById('form-error');
+    el.textContent = msg;
+    el.classList.add('visible');
+}
+function hideFormError() {
+    document.getElementById('form-error').classList.remove('visible');
+}
+
+function showToast(msg, ms = 3500) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('visible');
+    setTimeout(() => el.classList.remove('visible'), ms);
+}
+
+// =============================================================================
+// SETUP / API KEY
+// =============================================================================
+function saveApiKey() {
+    const key = document.getElementById('api-key-input').value.trim();
+    if (!key || !key.startsWith('AIza')) {
+        alert('Please enter a valid Gemini API key (starts with AIza...)');
+        return;
+    }
+    apiKey = key;
+    localStorage.setItem('gemini_api_key', key);
+    showState('form-state');
+    loadTemplates();
+}
+
+// =============================================================================
+// TEMPLATE LOADING
+// =============================================================================
+async function loadTemplates() {
+    const grid = document.getElementById('templates-grid');
+    const msg  = document.getElementById('no-templates-msg');
+
+    // Try manifest.json first, then fall back to TEMPLATE_FILES constant
+    let files = [...TEMPLATE_FILES];
+    try {
+        const res = await fetch('templates/manifest.json');
+        if (res.ok) {
+            const json = await res.json();
+            if (Array.isArray(json) && json.length > 0) files = json;
+        }
+    } catch (_) {}
+
+    if (files.length === 0) {
+        msg.innerHTML = `
+            No templates found yet.<br>
+            <small>Add images to <code>templates/</code> and list them in <code>TEMPLATE_FILES</code> (line 1 of script) or create <code>templates/manifest.json</code></small>
+        `;
+        updateSelectionCount();
+        return;
+    }
+
+    msg.style.display = 'none';
+
+    for (const filename of files) {
+        const card = document.createElement('div');
+        card.className = 'template-card';
+        card.dataset.file = filename;
+        card.innerHTML = `
+            <img src="templates/${filename}" alt="${filename}"
+                 onerror="this.parentElement.style.display='none'">
+            <div class="check-badge">✓</div>
+            <span class="template-name">${filename.replace(/\.[^.]+$/, '')}</span>
+        `;
+        card.addEventListener('click', () => toggleTemplate(card, filename));
+        grid.appendChild(card);
+    }
+    updateSelectionCount();
+}
+
+function toggleTemplate(card, file) {
+    if (selectedTempls.has(file)) {
+        selectedTempls.delete(file);
+        card.classList.remove('selected');
+    } else {
+        selectedTempls.add(file);
+        card.classList.add('selected');
+    }
+    updateSelectionCount();
+}
+
+function updateSelectionCount() {
+    const n = selectedTempls.size;
+    document.getElementById('selection-count').textContent =
+        n === 0 ? 'No templates selected — will generate 1 ad from scratch'
+                : `${n} template${n > 1 ? 's' : ''} selected`;
+}
+
+// =============================================================================
+// GEMINI API CALLS
+// =============================================================================
+async function geminiText(prompt) {
+    const url = `${GEMINI_API}${MODEL_TEXT}:generateContent?key=${apiKey}`;
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
+        })
+    });
+    if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error?.message || `Gemini text error (${res.status})`);
+    }
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+async function geminiImage(parts) {
+    const url = `${GEMINI_API}${MODEL_IMAGE}:generateContent?key=${apiKey}`;
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts }],
+            generationConfig: { responseModalities: ['IMAGE', 'TEXT'] }
+        })
+    });
+    if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error?.message || `Gemini image error (${res.status})`);
+    }
+    const data = await res.json();
+    const imgPart = data.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+    if (!imgPart) return null;
+    return `data:${imgPart.inlineData.mimeType};base64,${imgPart.inlineData.data}`;
+}
+
+// =============================================================================
+// IMAGE UTILITIES
+// =============================================================================
+function blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload  = e => resolve(e.target.result);
+        r.onerror = reject;
+        r.readAsDataURL(blob);
+    });
+}
+
+async function urlToBase64(imageUrl) {
+    if (!imageUrl) return null;
+    const attempts = [imageUrl, PROXY + encodeURIComponent(imageUrl)];
+    for (const u of attempts) {
+        try {
+            const res = await fetch(u, { signal: AbortSignal.timeout(12000) });
+            if (!res.ok) continue;
+            const blob = await res.blob();
+            if (!blob.type.startsWith('image/')) continue;
+            return await blobToDataURL(blob);
+        } catch (_) {}
+    }
+    return null;
+}
+
+// =============================================================================
+// LANDING PAGE FETCH
+// =============================================================================
+async function fetchPage(rawUrl) {
+    const res = await fetch(PROXY + encodeURIComponent(rawUrl), {
+        signal: AbortSignal.timeout(20000)
+    });
+    if (!res.ok) throw new Error(`Could not fetch landing page (HTTP ${res.status}). Check the URL.`);
+    const html = await res.text();
+
+    const ogImage =
+        (html.match(/property="og:image"\s+content="([^"]+)"/i) ||
+         html.match(/content="([^"]+)"\s+property="og:image"/i) ||
+         html.match(/name="twitter:image"\s+content="([^"]+)"/i) ||
+         html.match(/content="([^"]+)"\s+name="twitter:image"/i))?.[1] || null;
+
+    const bodyText = html
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<!--[\s\S]*?-->/g, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 12000);
+
+    return { ogImage, bodyText };
+}
+
+// =============================================================================
+// BRAND ANALYSIS PROMPT
+// =============================================================================
+function buildAnalysisPrompt(url, niche, bodyText, ogImageUrl) {
+    return `You are an elite brand & customer-avatar researcher and conversion strategist. Your role is to analyze a single brand from its landing page in context of the desired niche we want to target, which is "${niche}".
+
+IMPORTANT: The landing page content has been pre-fetched for you below. Use this content for your analysis instead of attempting to crawl the URL directly.
+
+Landing page URL: ${url}
+${ogImageUrl ? `Main product/brand image URL: ${ogImageUrl}` : ''}
+
+LANDING PAGE CONTENT:
+---
+${bodyText}
+---
+
+Analyze this page with this niche context in mind: "${niche}"
+
+Use the entire visible content and key indicators (headlines, hero copy, CTAs, product names, pricing signals, trust markers, imagery descriptions, navigation labels, metadata) to make evidence-based inferences.
+
+Operational rules:
+- Reasoning method: Internally run Chain-of-Thought style analysis with at least 5 independent reasoning passes; do NOT output internal chains — only output final aggregated results.
+- Do not output internal reasoning steps; share only final conclusions and evidence.
+- Be as comprehensive as necessary.
+- Tone: analytical, precise, and practical.
+
+Analyze and extract the following:
+
+1) Who are we speaking to?
+Demographics (age ranges, sex/gender skew, typical locations, job roles/industries, income ranges) and psychographics (primary interests & hobbies, affinity audiences useful for ad targeting — list 6–10 items).
+
+2) What is the transformation we are offering?
+Short summary (1–3 sentences) and 3 concrete outcomes the customer experiences after using the offering.
+
+3) What is the measurable difference we are offering?
+For each measurable benefit, specify before-state metric and expected after-state metric.
+
+4) What is the emotional why?
+Top 6 emotional motivations that drive purchase decisions.
+
+5) What is the rational why?
+Top 6 rational reasons (features, ROI, performance, guarantee, price, speed).
+
+6) Why not?
+Top 6 likely objections with: the objection statement, likely root cause, and a concise objection response.
+
+7) Tone of voice
+4–8 bullets describing tone attributes, word-level guidelines, and 3 sample micro-phrases (<=10 words each).
+
+8) Brand representative
+Persona: age range, sex if relevant, professional background, voice, wardrobe/style, top 3 phrases they would use.
+
+9) What are the USPs of the product?
+Top 10 unique selling points.
+
+CRITICAL — OUTPUT FORMAT:
+You MUST respond with ONLY a valid JSON object. No markdown, no code blocks, no preamble. Just the raw JSON starting with { and ending with }.
+
+Use this exact structure:
+{
+  "brandName": "string",
+  "productName": "string",
+  "productImageUrl": "${ogImageUrl || ''}",
+  "targetAudience": {
+    "demographics": "string summary",
+    "psychographics": ["interest 1", "interest 2"],
+    "affinityAudiences": ["audience 1", "audience 2", "audience 3", "audience 4", "audience 5"]
+  },
+  "transformation": {
+    "summary": "string",
+    "outcomes": ["outcome 1", "outcome 2", "outcome 3"]
+  },
+  "measurableDifference": [
+    {"before": "...", "after": "..."}
+  ],
+  "emotionalWhy": ["emotion 1", "emotion 2", "emotion 3", "emotion 4", "emotion 5", "emotion 6"],
+  "rationalWhy": ["reason 1", "reason 2", "reason 3", "reason 4", "reason 5", "reason 6"],
+  "objections": [
+    {"objection": "...", "rootCause": "...", "response": "..."}
+  ],
+  "toneOfVoice": ["tone attribute 1", "tone attribute 2"],
+  "brandRepresentative": "string description",
+  "USPs": ["usp 1", "usp 2", "usp 3", "usp 4", "usp 5"],
+  "adAngles": [
+    "Angle 1 tailored for ${niche}",
+    "Angle 2 tailored for ${niche}",
+    "Angle 3 tailored for ${niche}",
+    "Angle 4 tailored for ${niche}",
+    "Angle 5 tailored for ${niche}"
+  ],
+  "suggestedHeadlines": [
+    "Headline 1 for ${niche}",
+    "Headline 2 for ${niche}",
+    "Headline 3 for ${niche}",
+    "Headline 4 for ${niche}",
+    "Headline 5 for ${niche}"
+  ]
+}`;
+}
+
+// =============================================================================
+// AD IMAGE GENERATION PROMPT
+// =============================================================================
+function buildAdPrompt(analysis, niche, adAngle, headline) {
+    return `You are an expert social media ad creative designer specialising in high-converting Meta (Facebook & Instagram) ad creatives.
+
+Create a vertical 9:16 social media ad image with the following brief:
+
+PRODUCT: ${analysis.productName || 'Product'}
+BRAND: ${analysis.brandName || 'Brand'}
+TARGET NICHE: ${niche}
+AD ANGLE: ${adAngle}
+HEADLINE: "${headline}"
+KEY USP: ${analysis.USPs?.[0] || analysis.rationalWhy?.[0] || ''}
+TONE: ${analysis.toneOfVoice?.[0] || 'Professional and compelling'}
+AUDIENCE: ${analysis.targetAudience?.demographics || ''}
+
+CREATIVE INSTRUCTIONS:
+- Design a high-converting vertical ad (9:16 aspect ratio — portrait format for Stories/Reels)
+- If a reference template image is provided (first attached image), closely match its layout, composition, typography style, and visual hierarchy
+- If a product image is provided (second attached image), feature it prominently as the hero element
+- The headline "${headline}" should be the dominant text element, large and legible
+- Include a clear call-to-action button or text
+- Design should feel native to Instagram Stories / Facebook Stories / Reels
+- Professional quality, suitable for paid media placement
+- Optimised visually for the target audience: ${niche}`;
+}
+
+// =============================================================================
+// MAIN GENERATION FLOW
+// =============================================================================
+async function startGeneration() {
+    const url   = document.getElementById('url-input').value.trim();
+    const niche = document.getElementById('niche-input').value.trim();
+
+    if (!url)   { showFormError('Please enter a landing page URL.'); return; }
+    if (!niche) { showFormError('Please enter a target niche.'); return; }
+    if (!apiKey){ showState('setup-state'); return; }
+
+    lastUrl   = url;
+    lastNiche = niche;
+    hideFormError();
+
+    // Reset progress UI
+    ['step-fetch', 'step-analyze', 'step-image', 'step-gen'].forEach(id => {
+        const el = document.getElementById(id);
+        el.classList.remove('active', 'done', 'error');
+        const icons = { 'step-fetch': '🌐', 'step-analyze': '🧠', 'step-image': '🖼', 'step-gen': '✨' };
+        document.getElementById(id + '-icon').textContent = icons[id];
+    });
+
+    setProgress(0);
+    generatedAds = [];
+    document.getElementById('ads-grid').innerHTML = '';
+    showState('progress-state');
+
+    try {
+        // ── Step 1: Fetch landing page ──────────────────────────────────────
+        setStepActive('step-fetch');
+        updateDetail('step-fetch', 'Fetching page via CORS proxy...');
+        const page = await fetchPage(url);
+        setStepDone('step-fetch', `Done · ${(page.bodyText.length / 1000).toFixed(1)}k chars extracted`);
+        setProgress(15);
+
+        // ── Step 2: Brand analysis ──────────────────────────────────────────
+        setStepActive('step-analyze');
+        updateDetail('step-analyze', 'Running brand & niche analysis...');
+        const rawAnalysis = await geminiText(buildAnalysisPrompt(url, niche, page.bodyText, page.ogImage));
+
+        let analysis;
+        try {
+            const cleaned = rawAnalysis
+                .replace(/^```json?\s*/i, '')
+                .replace(/\s*```$/i, '')
+                .trim();
+            analysis = JSON.parse(cleaned);
+        } catch (_) {
+            throw new Error('Analysis returned unexpected format. Please try again.');
+        }
+
+        setStepDone('step-analyze',
+            `${analysis.brandName || 'Brand'} · ${analysis.adAngles?.length || 0} ad angles identified`);
+        setProgress(35);
+
+        // ── Step 3: Product image ───────────────────────────────────────────
+        setStepActive('step-image');
+        const imgUrl = analysis.productImageUrl || page.ogImage;
+        updateDetail('step-image', imgUrl ? 'Downloading product image...' : 'No product image found, continuing...');
+
+        let productImgB64 = null;
+        if (imgUrl) productImgB64 = await urlToBase64(imgUrl);
+
+        setStepDone('step-image', productImgB64
+            ? '✓ Product image ready'
+            : 'Proceeding without product image');
+        setProgress(45);
+
+        // ── Step 4: Generate ads ────────────────────────────────────────────
+        setStepActive('step-gen');
+
+        const templates = selectedTempls.size > 0
+            ? [...selectedTempls]
+            : [null]; // generate 1 ad without template if none selected
+
+        const total = templates.length;
+
+        for (let i = 0; i < total; i++) {
+            const tmpl = templates[i];
+            updateDetail('step-gen', `Generating ad ${i + 1} of ${total}${tmpl ? ` (${tmpl})` : ''}...`);
+
+            // Load template image if selected
+            let tmplB64 = null;
+            if (tmpl) tmplB64 = await urlToBase64(`templates/${tmpl}`);
+
+            // Build prompt inputs
+            const adAngle  = analysis.adAngles?.[i % Math.max(analysis.adAngles?.length || 1, 1)] || 'key benefit focused';
+            const headline = analysis.suggestedHeadlines?.[i % Math.max(analysis.suggestedHeadlines?.length || 1, 1)]
+                          || analysis.USPs?.[0] || 'See the difference today';
+
+            const parts = [{ text: buildAdPrompt(analysis, niche, adAngle, headline) }];
+
+            // Attach product image
+            if (productImgB64) {
+                parts.push({
+                    inlineData: {
+                        mimeType: productImgB64.match(/data:([^;]+)/)?.[1] || 'image/jpeg',
+                        data: productImgB64.split(',')[1]
+                    }
+                });
+            }
+
+            // Attach template image
+            if (tmplB64) {
+                parts.push({
+                    inlineData: {
+                        mimeType: tmplB64.match(/data:([^;]+)/)?.[1] || 'image/jpeg',
+                        data: tmplB64.split(',')[1]
+                    }
+                });
+            }
+
+            const adImg = await geminiImage(parts);
+
+            if (adImg) {
+                generatedAds.push({ src: adImg, template: tmpl, angle: adAngle, headline });
+                appendAdCard(adImg, i + 1, adAngle);
+            }
+
+            setProgress(45 + 55 * (i + 1) / total);
+        }
+
+        setStepDone('step-gen', `${generatedAds.length} ad${generatedAds.length !== 1 ? 's' : ''} generated`);
+        setProgress(100);
+
+        document.getElementById('results-meta').textContent =
+            `${generatedAds.length} ad${generatedAds.length !== 1 ? 's' : ''} · ${niche}`;
+
+        await new Promise(r => setTimeout(r, 500));
+        showState('results-state');
+
+    } catch (err) {
+        console.error(err);
+        ['step-gen', 'step-image', 'step-analyze', 'step-fetch'].forEach(id => {
+            if (document.getElementById(id).classList.contains('active')) {
+                setStepError(id, err.message);
+            }
+        });
+        await new Promise(r => setTimeout(r, 2500));
+        showState('form-state');
+        showFormError('Error: ' + err.message);
+    }
+}
+
+// =============================================================================
+// RESULTS
+// =============================================================================
+function appendAdCard(imgSrc, index, angle) {
+    const grid = document.getElementById('ads-grid');
+    const card = document.createElement('div');
+    card.className = 'ad-card';
+    card.innerHTML = `
+        <div class="ad-image-wrap">
+            <img class="ad-image" src="${imgSrc}" alt="Ad ${index}" />
+        </div>
+        <div class="ad-footer">
+            <div>
+                <div class="ad-label">Ad ${index}</div>
+                <div class="ad-angle">${angle}</div>
+            </div>
+            <button class="btn btn-secondary btn-sm"
+                    onclick="downloadSingle('${imgSrc}','meta-ad-${index}.jpg')">⬇</button>
+        </div>
+    `;
+    grid.appendChild(card);
+}
+
+function downloadSingle(dataUrl, filename) {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename;
+    a.click();
+}
+
+async function downloadAll() {
+    if (!generatedAds.length) return;
+    const btn = document.getElementById('download-all-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Zipping...';
+    try {
+        const zip = new JSZip();
+        generatedAds.forEach((ad, i) => {
+            const ext  = ad.src.match(/data:image\/([^;]+)/)?.[1] || 'jpg';
+            const data = ad.src.split(',')[1];
+            zip.file(`meta-ad-${i + 1}.${ext}`, data, { base64: true });
+        });
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `meta-ads-${Date.now()}.zip`;
+        a.click();
+        showToast(`✓ Downloaded ${generatedAds.length} ads as ZIP`);
+    } catch (e) {
+        showToast('Download failed: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '⬇ Download All';
+    }
+}
+
+function goBackToForm() {
+    document.getElementById('url-input').value   = lastUrl;
+    document.getElementById('niche-input').value = lastNiche;
+    showState('form-state');
+}
+
+// =============================================================================
+// INIT
+// =============================================================================
+function init() {
+    if (!apiKey) {
+        showState('setup-state');
+    } else {
+        showState('form-state');
+        loadTemplates();
+    }
+
+    document.getElementById('api-key-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') saveApiKey();
+    });
+    ['url-input', 'niche-input'].forEach(id => {
+        document.getElementById(id).addEventListener('keydown', e => {
+            if (e.key === 'Enter') startGeneration();
+        });
+    });
+}
+
+init();
+
+    </script>
+</body>
+</html>
