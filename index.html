@@ -551,8 +551,8 @@
                     <li class="step-item" id="step-fetch">
                         <div class="step-icon" id="step-fetch-icon">🌐</div>
                         <div class="step-body">
-                            <h4>Fetching landing page</h4>
-                            <p class="step-detail" id="step-fetch-detail">Retrieving page content...</p>
+                            <h4>Reading landing page</h4>
+                            <p class="step-detail" id="step-fetch-detail">Sending URL to Gemini...</p>
                         </div>
                     </li>
                     <li class="step-item" id="step-analyze">
@@ -781,6 +781,28 @@ async function geminiText(prompt) {
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
+// Gemini fetches the URL itself (server-side, bypasses CORS/bot protection)
+async function geminiTextWithUrl(prompt) {
+    const url = `${GEMINI_API}${MODEL_TEXT}:generateContent?key=${apiKey}`;
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            tools: [{ url_context: {} }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
+        })
+    });
+    if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error?.message || `Gemini error (${res.status})`);
+    }
+    const data = await res.json();
+    // URL context responses may split text across parts — join them all
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    return parts.filter(p => p.text).map(p => p.text).join('');
+}
+
 async function geminiImage(parts) {
     const url = `${GEMINI_API}${MODEL_IMAGE}:generateContent?key=${apiKey}`;
     const res = await fetch(url, {
@@ -914,7 +936,97 @@ async function fetchPage(rawUrl) {
 }
 
 // =============================================================================
-// BRAND ANALYSIS PROMPT
+// BRAND ANALYSIS PROMPT — Direct (Gemini fetches the URL itself)
+// =============================================================================
+function buildAnalysisPromptDirect(url, niche) {
+    return `Please fetch and read this landing page: ${url}
+
+You are an elite brand & customer-avatar researcher and conversion strategist.
+Analyze this brand in the context of the target niche: "${niche}".
+
+Use all visible content — headlines, hero copy, CTAs, product names, pricing signals,
+trust markers, imagery, navigation labels, metadata — to make evidence-based inferences.
+
+Operational rules:
+- Run at least 5 independent reasoning passes internally; output only final conclusions.
+- Do not output internal reasoning steps.
+- Tone: analytical, precise, and practical.
+
+Analyze and extract the following:
+
+1) Who are we speaking to?
+Demographics (age ranges, sex/gender skew, typical locations, job roles/industries, income ranges) and psychographics (primary interests & hobbies, affinity audiences useful for ad targeting — list 6–10 items).
+
+2) What is the transformation we are offering?
+Short summary (1–3 sentences) and 3 concrete outcomes the customer experiences after using the offering.
+
+3) What is the measurable difference we are offering?
+For each measurable benefit, specify before-state metric and expected after-state metric.
+
+4) What is the emotional why?
+Top 6 emotional motivations that drive purchase decisions.
+
+5) What is the rational why?
+Top 6 rational reasons (features, ROI, performance, guarantee, price, speed).
+
+6) Why not?
+Top 6 likely objections with: the objection statement, likely root cause, and a concise objection response.
+
+7) Tone of voice
+4–8 bullets describing tone attributes, word-level guidelines, and 3 sample micro-phrases (<=10 words each).
+
+8) Brand representative
+Persona: age range, sex if relevant, professional background, voice, wardrobe/style, top 3 phrases they would use.
+
+9) What are the USPs of the product?
+Top 10 unique selling points.
+
+CRITICAL — OUTPUT FORMAT:
+You MUST respond with ONLY a valid JSON object. No markdown, no code blocks, no preamble. Just raw JSON starting with { and ending with }.
+
+{
+  "brandName": "string",
+  "productName": "string",
+  "productImageUrl": "the main product image URL from the page (full https URL)",
+  "targetAudience": {
+    "demographics": "string summary",
+    "psychographics": ["interest 1", "interest 2"],
+    "affinityAudiences": ["audience 1", "audience 2", "audience 3", "audience 4", "audience 5"]
+  },
+  "transformation": {
+    "summary": "string",
+    "outcomes": ["outcome 1", "outcome 2", "outcome 3"]
+  },
+  "measurableDifference": [
+    {"before": "...", "after": "..."}
+  ],
+  "emotionalWhy": ["emotion 1", "emotion 2", "emotion 3", "emotion 4", "emotion 5", "emotion 6"],
+  "rationalWhy": ["reason 1", "reason 2", "reason 3", "reason 4", "reason 5", "reason 6"],
+  "objections": [
+    {"objection": "...", "rootCause": "...", "response": "..."}
+  ],
+  "toneOfVoice": ["tone attribute 1", "tone attribute 2"],
+  "brandRepresentative": "string description",
+  "USPs": ["usp 1", "usp 2", "usp 3", "usp 4", "usp 5"],
+  "adAngles": [
+    "Angle 1 tailored for ${niche}",
+    "Angle 2 tailored for ${niche}",
+    "Angle 3 tailored for ${niche}",
+    "Angle 4 tailored for ${niche}",
+    "Angle 5 tailored for ${niche}"
+  ],
+  "suggestedHeadlines": [
+    "Headline 1 for ${niche}",
+    "Headline 2 for ${niche}",
+    "Headline 3 for ${niche}",
+    "Headline 4 for ${niche}",
+    "Headline 5 for ${niche}"
+  ]
+}`;
+}
+
+// =============================================================================
+// BRAND ANALYSIS PROMPT — Fallback (pre-fetched HTML passed in)
 // =============================================================================
 function buildAnalysisPrompt(url, niche, bodyText, ogImageUrl) {
     return `You are an elite brand & customer-avatar researcher and conversion strategist. Your role is to analyze a single brand from its landing page in context of the desired niche we want to target, which is "${niche}".
@@ -1070,17 +1182,35 @@ async function startGeneration() {
     showState('progress-state');
 
     try {
-        // ── Step 1: Fetch landing page ──────────────────────────────────────
+        // ── Step 1: Read landing page ───────────────────────────────────────
+        // Primary: Gemini URL context (Google fetches server-side — bypasses all bot protection)
+        // Fallback: CORS proxy if URL context unavailable
         setStepActive('step-fetch');
-        updateDetail('step-fetch', 'Fetching page via CORS proxy...');
-        const page = await fetchPage(url);
-        setStepDone('step-fetch', `Done · ${(page.bodyText.length / 1000).toFixed(1)}k chars extracted`);
+        updateDetail('step-fetch', 'Sending URL to Gemini...');
+
+        let rawAnalysis = null;
+        let fallbackOgImage = null;
+
+        try {
+            rawAnalysis = await geminiTextWithUrl(buildAnalysisPromptDirect(url, niche));
+            setStepDone('step-fetch', 'Page read by Gemini ✓');
+        } catch (urlCtxErr) {
+            // URL context failed — fall back to CORS proxy
+            updateDetail('step-fetch', 'Trying CORS proxy fallback...');
+            const page = await fetchPage(url); // throws its own error if all proxies fail
+            fallbackOgImage = page.ogImage;
+            setStepDone('step-fetch', `Fetched · ${(page.bodyText.length / 1000).toFixed(1)}k chars`);
+            setProgress(15);
+            setStepActive('step-analyze');
+            updateDetail('step-analyze', 'Running brand & niche analysis...');
+            rawAnalysis = await geminiText(buildAnalysisPrompt(url, niche, page.bodyText, page.ogImage));
+        }
+
         setProgress(15);
 
-        // ── Step 2: Brand analysis ──────────────────────────────────────────
+        // ── Step 2: Parse analysis ──────────────────────────────────────────
         setStepActive('step-analyze');
-        updateDetail('step-analyze', 'Running brand & niche analysis...');
-        const rawAnalysis = await geminiText(buildAnalysisPrompt(url, niche, page.bodyText, page.ogImage));
+        updateDetail('step-analyze', 'Parsing brand analysis...');
 
         let analysis;
         try {
@@ -1093,13 +1223,18 @@ async function startGeneration() {
             throw new Error('Analysis returned unexpected format. Please try again.');
         }
 
+        // If URL context didn't find a product image, use fallback ogImage
+        if (!analysis.productImageUrl && fallbackOgImage) {
+            analysis.productImageUrl = fallbackOgImage;
+        }
+
         setStepDone('step-analyze',
             `${analysis.brandName || 'Brand'} · ${analysis.adAngles?.length || 0} ad angles identified`);
         setProgress(35);
 
         // ── Step 3: Product image ───────────────────────────────────────────
         setStepActive('step-image');
-        const imgUrl = analysis.productImageUrl || page.ogImage;
+        const imgUrl = analysis.productImageUrl;
         updateDetail('step-image', imgUrl ? 'Downloading product image...' : 'No product image found, continuing...');
 
         let productImgB64 = null;
